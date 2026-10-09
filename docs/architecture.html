@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent Guard Architecture</title>
+<script>
+  // ?theme=light or ?theme=dark forces a theme (e.g. when embedded in a light-only site)
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  })();
+</script>
 <style>
   :root {
     --bg: #f7f7f5;
