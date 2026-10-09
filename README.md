@@ -183,6 +183,21 @@ src/agent_guard/
   guard.py       Guard interceptor, approvers, decorator
   exceptions.py  PolicyError, ActionBlocked
 examples/        policy.yaml, policy.json, agent_loop.py
-tests/           pytest suite
+evaluation/      reproducible evaluation framework (scenarios, mock agent, harness, report)
+results/         reference/ - committed results of the reference evaluation run
+tests/           pytest suite (tests/eval/ verifies the evaluation)
 docs/            architecture.html (animated diagram)
+```
+
+## Evaluation
+
+A reproducible evaluation compares the same mock agent **with and without** the interceptor
+on 61 labeled actions and a 1,383-step simulated workload, measuring block rate, false
+positives, human-escalation rate and latency. Headline: 100% of anticipated harmful actions
+blocked, but only 40% of held-out evasions; ~0.07 ms median overhead per action.
+See the [methods and results report](evaluation/REPORT.md).
+
+```bash
+python -m evaluation.run --out results/latest   # writes CSV + JSON results
+pytest tests/eval                                # re-verifies the published numbers
 ```

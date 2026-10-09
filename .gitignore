@@ -6,3 +6,7 @@ venv/
 .pytest_cache/
 build/
 dist/
+
+# evaluation outputs (only the reference run is committed)
+results/*
+!results/reference/
