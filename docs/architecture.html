@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Guard Architecture</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --panel: #ffffff;
+    --ink: #1d1f23;
+    --muted: #6b6f78;
+    --line: #c9ccd2;
+    --accent: #3b5bdb;
+    --allow: #2b8a3e;
+    --block: #c92a2a;
+    --ask: #d9840d;
+    --allow-bg: #ebfbee;
+    --block-bg: #fff0f0;
+    --ask-bg: #fff6e6;
+    --accent-bg: #edf2ff;
+    --stage-bg: #f1f3f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15171b;
+      --panel: #1e2127;
+      --ink: #e8e9ec;
+      --muted: #9aa0aa;
+      --line: #3a3f48;
+      --accent: #748ffc;
+      --allow: #51cf66;
+      --block: #ff6b6b;
+      --ask: #fcc419;
+      --allow-bg: #1b2e20;
+      --block-bg: #331b1d;
+      --ask-bg: #33291a;
+      --accent-bg: #1f2540;
+      --stage-bg: #262a31;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15171b;
+    --panel: #1e2127;
+    --ink: #e8e9ec;
+    --muted: #9aa0aa;
+    --line: #3a3f48;
+    --accent: #748ffc;
+    --allow: #51cf66;
+    --block: #ff6b6b;
+    --ask: #fcc419;
+    --allow-bg: #1b2e20;
+    --block-bg: #331b1d;
+    --ask-bg: #33291a;
+    --accent-bg: #1f2540;
+    --stage-bg: #262a31;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 28px 16px 48px; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: center; }
+  button {
+    font: inherit; font-size: 13px;
+    padding: 6px 12px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .spacer { flex: 1; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px; overflow: hidden;
+  }
+  svg { width: 100%; height: auto; display: block; }
+  .node rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; transition: fill .25s, stroke .25s; }
+  .node text { fill: var(--ink); font-size: 14px; font-weight: 600; text-anchor: middle; }
+  .node text.small { fill: var(--muted); font-size: 11.5px; font-weight: 400; }
+  .node.hot rect { stroke: var(--accent); fill: var(--accent-bg); stroke-width: 2.5; }
+  .node.allow.hot rect { stroke: var(--allow); fill: var(--allow-bg); }
+  .node.block.hot rect { stroke: var(--block); fill: var(--block-bg); }
+  .node.ask.hot rect { stroke: var(--ask); fill: var(--ask-bg); }
+  .guard-frame { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; }
+  .guard-label { fill: var(--accent); font-size: 13px; font-weight: 700; letter-spacing: .04em; }
+  .stage rect { fill: var(--stage-bg); stroke: var(--line); transition: fill .2s, stroke .2s; }
+  .stage text { fill: var(--ink); font-size: 12.5px; }
+  .stage text.res { font-weight: 700; text-anchor: end; }
+  .stage.on rect { stroke: var(--accent); stroke-width: 2; }
+  .stage.r-allow rect { stroke: var(--allow); fill: var(--allow-bg); }
+  .stage.r-block rect { stroke: var(--block); fill: var(--block-bg); }
+  .stage.r-ask rect { stroke: var(--ask); fill: var(--ask-bg); }
+  .r-allow text.res { fill: var(--allow); }
+  .r-block text.res { fill: var(--block); }
+  .r-ask text.res { fill: var(--ask); }
+  .wire { fill: none; stroke: var(--line); stroke-width: 2; }
+  .wire.allow { stroke: var(--allow); opacity: .55; }
+  .wire.block { stroke: var(--block); opacity: .55; }
+  .wire.ask { stroke: var(--ask); opacity: .55; }
+  .wire.lit { opacity: 1; stroke-width: 3; }
+  .wire-label { font-size: 11.5px; font-weight: 700; }
+  .wire-label.allow { fill: var(--allow); }
+  .wire-label.block { fill: var(--block); }
+  .wire-label.ask { fill: var(--ask); }
+  .wire-label.muted { fill: var(--muted); font-weight: 400; }
+  .token circle { stroke: var(--panel); stroke-width: 2; }
+  .token text { fill: var(--ink); font-size: 11.5px; font-weight: 600; }
+  marker path { fill: var(--line); }
+  .grid { display: grid; grid-template-columns: 1fr 320px; gap: 14px; margin-top: 14px; }
+  .log { font: 12.5px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace; max-height: 300px; overflow: auto; }
+  .log div { padding: 3px 0; border-bottom: 1px solid var(--line); }
+  .log .v-allow { color: var(--allow); font-weight: 700; }
+  .log .v-block { color: var(--block); font-weight: 700; }
+  .log .v-ask { color: var(--ask); font-weight: 700; }
+  h2 { font-size: 15px; margin: 0 0 8px; }
+  .legend { display: grid; gap: 8px; font-size: 13.5px; }
+  .legend b { display: inline-block; min-width: 52px; }
+  .now { font-size: 14px; min-height: 44px; }
+  .now code { background: var(--stage-bg); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Agent Guard architecture</h1>
+  <p class="sub">Every tool call is intercepted and evaluated against the policy before it runs. Watch requests flow through the interceptor.</p>
+
+  <div class="controls" id="controls">
+    <button id="play" class="active">Pause</button>
+    <span class="spacer"></span>
+  </div>
+
+  <div class="card">
+    <div class="now" id="now">Starting...</div>
+    <svg id="diagram" viewBox="0 0 1000 560" role="img" aria-label="Agent Guard data flow diagram">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z"/>
+        </marker>
+      </defs>
+
+      <!-- wires -->
+      <path id="p-policy" class="wire" d="M410,92 L410,140" marker-end="url(#arrow)"/>
+      <path id="p-call" class="wire" d="M200,275 L258,275" marker-end="url(#arrow)"/>
+      <path id="p-allow" class="wire allow" d="M562,240 C620,240 620,95 678,95" marker-end="url(#arrow)"/>
+      <path id="p-ask" class="wire ask" d="M562,275 L678,275" marker-end="url(#arrow)"/>
+      <path id="p-block" class="wire block" d="M562,310 C620,310 620,440 678,440" marker-end="url(#arrow)"/>
+      <path id="p-approve" class="wire allow" d="M780,240 L780,127" marker-end="url(#arrow)"/>
+      <path id="p-deny" class="wire block" d="M780,310 L780,408" marker-end="url(#arrow)"/>
+      <path id="p-result" class="wire" d="M882,95 L955,95 L955,530 L120,530 L120,322" marker-end="url(#arrow)"/>
+      <path id="p-refused" class="wire" d="M780,472 L780,530 L120,530 L120,322"/>
+      <path id="p-audit" class="wire" d="M410,410 L410,462" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+
+      <text class="wire-label allow" x="600" y="150">ALLOW</text>
+      <text class="wire-label ask" x="598" y="267">ASK</text>
+      <text class="wire-label block" x="600" y="400">BLOCK</text>
+      <text class="wire-label allow" x="790" y="190">approve</text>
+      <text class="wire-label block" x="790" y="365">deny</text>
+      <text class="wire-label muted" x="500" y="522">observation / reasons fed back to the model</text>
+
+      <!-- nodes -->
+      <g class="node" id="n-agent">
+        <rect x="40" y="228" width="160" height="94" rx="10"/>
+        <text x="120" y="268">AI Agent</text>
+        <text class="small" x="120" y="290">LLM proposes a tool call</text>
+      </g>
+      <g class="node" id="n-policy">
+        <rect x="320" y="30" width="180" height="62" rx="10"/>
+        <text x="410" y="56">Policy</text>
+        <text class="small" x="410" y="76">policy.yaml / policy.json</text>
+      </g>
+
+      <rect class="guard-frame" x="260" y="140" width="300" height="270" rx="12"/>
+      <text class="guard-label" x="276" y="162">GUARD INTERCEPTOR</text>
+      <g class="stage" id="s-deny"><rect x="280" y="176" width="260" height="42" rx="7"/><text x="294" y="202">1  Denylist</text><text class="res" x="528" y="202"></text></g>
+      <g class="stage" id="s-rules"><rect x="280" y="226" width="260" height="42" rx="7"/><text x="294" y="252">2  Conditional rules</text><text class="res" x="528" y="252"></text></g>
+      <g class="stage" id="s-allow"><rect x="280" y="276" width="260" height="42" rx="7"/><text x="294" y="302">3  Allowlist</text><text class="res" x="528" y="302"></text></g>
+      <g class="stage" id="s-final"><rect x="280" y="336" width="260" height="56" rx="7"/><text x="294" y="360">4  Verdict</text><text x="294" y="380" style="fill:var(--muted);font-size:11px">block &gt; ask &gt; allow, else default</text><text class="res" x="528" y="370"></text></g>
+
+      <g class="node allow" id="n-tool">
+        <rect x="680" y="63" width="200" height="64" rx="10"/>
+        <text x="780" y="90">Tool executes</text>
+        <text class="small" x="780" y="110">fn(**args) runs</text>
+      </g>
+      <g class="node ask" id="n-human">
+        <rect x="680" y="240" width="200" height="70" rx="10"/>
+        <text x="780" y="268">Human approval</text>
+        <text class="small" x="780" y="290">approver(decision) -&gt; bool</text>
+      </g>
+      <g class="node block" id="n-blocked">
+        <rect x="680" y="408" width="200" height="64" rx="10"/>
+        <text x="780" y="435">ActionBlocked</text>
+        <text class="small" x="780" y="455">tool never runs</text>
+      </g>
+      <g class="node" id="n-audit">
+        <rect x="330" y="462" width="160" height="40" rx="8"/>
+        <text x="410" y="487" style="font-size:13px">Audit log</text>
+      </g>
+
+      <g class="token" id="token" style="opacity:0">
+        <circle r="9" fill="var(--accent)"/>
+        <text x="14" y="-12"></text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Decision log</h2>
+      <div class="log" id="log"></div>
+    </div>
+    <div class="card">
+      <h2>Verdicts</h2>
+      <div class="legend">
+        <div><b style="color:var(--allow)">ALLOW</b> tool runs, result returns to the agent</div>
+        <div><b style="color:var(--ask)">ASK</b> paused until a human approves; no approver means block</div>
+        <div><b style="color:var(--block)">BLOCK</b> raises <code>ActionBlocked</code>; reasons go back to the agent</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  const SCENARIOS = [
+    { label: "read_file notes.md", tool: "read_file", args: "path='notes/todo.md'",
+      stages: { deny: "-", rules: "no match", allow: "ALLOW" }, verdict: "allow",
+      reason: "tool 'read_file' is on the allowlist" },
+    { label: "read_file .env", tool: "read_file", args: "path='config/.env'",
+      stages: { deny: "-", rules: "BLOCK", allow: "ALLOW" }, verdict: "block",
+      reason: "rule no-secret-files: reading secret files is not allowed" },
+    { label: "send_payment 5000 (approved)", tool: "send_payment", args: "amount=5000",
+      stages: { deny: "-", rules: "ASK", allow: "-" }, verdict: "ask", human: true,
+      reason: "rule large-payment-needs-approval" },
+    { label: "send_payment 9000 (denied)", tool: "send_payment", args: "amount=9000",
+      stages: { deny: "-", rules: "ASK", allow: "-" }, verdict: "ask", human: false,
+      reason: "rule large-payment-needs-approval" },
+    { label: "delete_records", tool: "delete_records", args: "table='users'",
+      stages: { deny: "BLOCK" }, verdict: "block",
+      reason: "tool 'delete_records' is on the denylist (delete_*)" },
+  ];
+
+  const $ = (s) => document.querySelector(s);
+  const token = $("#token"), dot = token.querySelector("circle"), tag = token.querySelector("text");
+  const now = $("#now"), log = $("#log"), playBtn = $("#play");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let paused = false, runId = 0, current = 0, buttons = [];
+  const color = { allow: "var(--allow)", block: "var(--block)", ask: "var(--ask)", call: "var(--accent)" };
+
+  const sleep = (ms, id) => new Promise((resolve, reject) => {
+    let left = ms, last = performance.now();
+    const tick = (t) => {
+      if (id !== runId) return reject("cancel");
+      if (!paused) left -= t - last;
+      last = t;
+      left <= 0 ? resolve() : requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
+  const move = (pathId, ms, id) => new Promise((resolve, reject) => {
+    const path = document.getElementById(pathId);
+    const len = path.getTotalLength();
+    path.classList.add("lit");
+    let elapsed = 0, last = performance.now();
+    if (reduceMotion) ms = 1;
+    const tick = (t) => {
+      if (id !== runId) { path.classList.remove("lit"); return reject("cancel"); }
+      if (!paused) elapsed += t - last;
+      last = t;
+      const k = Math.min(1, elapsed / ms);
+      const e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      const p = path.getPointAtLength(e * len);
+      token.setAttribute("transform", `translate(${p.x},${p.y})`);
+      if (k < 1) requestAnimationFrame(tick);
+      else { path.classList.remove("lit"); resolve(); }
+    };
+    requestAnimationFrame(tick);
+  });
+
+  function reset() {
+    document.querySelectorAll(".node").forEach(n => n.classList.remove("hot"));
+    document.querySelectorAll(".stage").forEach(s => {
+      s.classList.remove("on", "r-allow", "r-block", "r-ask");
+      s.querySelector("text.res").textContent = "";
+    });
+    document.querySelectorAll(".wire").forEach(w => w.classList.remove("lit"));
+  }
+  const hot = (id, on = true) => document.getElementById(id).classList.toggle("hot", on);
+  function stage(id, result) {
+    const s = document.getElementById("s-" + id);
+    s.classList.add("on");
+    const r = (result || "").toLowerCase();
+    if (["allow", "block", "ask"].includes(r)) s.classList.add("r-" + r);
+    s.querySelector("text.res").textContent = result || "";
+  }
+  function addLog(sc, final, note) {
+    const row = document.createElement("div");
+    row.innerHTML = `<span class="v-${final}">${final.toUpperCase()}</span> ${sc.tool}(${sc.args})<br>` +
+      `<span style="color:var(--muted)">${sc.reason}${note ? "; " + note : ""}</span>`;
+    log.prepend(row);
+    while (log.children.length > 12) log.lastChild.remove();
+  }
+  function select(i) {
+    buttons.forEach((b, j) => b.classList.toggle("active", j === i));
+  }
+
+  async function play(sc, id) {
+    reset();
+    token.setAttribute("transform", "translate(200,275)");
+    tag.style.visibility = "visible";
+    token.style.opacity = 1;
+    tag.textContent = `${sc.tool}(${sc.args})`;
+    dot.setAttribute("fill", color.call);
+    now.innerHTML = `The agent wants to call <code>${sc.tool}(${sc.args})</code>`;
+
+    hot("n-agent");
+    hot("n-policy");
+    await sleep(700, id);
+    await move("p-call", 900, id);
+    tag.style.visibility = "hidden";
+    hot("n-agent", false);
+    now.innerHTML = `Intercepted: evaluating <code>${sc.tool}</code> before it executes`;
+
+    const order = ["deny", "rules", "allow"];
+    for (const key of order) {
+      if (!(key in sc.stages)) break;
+      stage(key, sc.stages[key]);
+      await sleep(650, id);
+    }
+    stage("final", sc.verdict.toUpperCase());
+    dot.setAttribute("fill", color[sc.verdict]);
+    hot("n-audit");
+    await sleep(700, id);
+    hot("n-policy", false);
+    tag.style.visibility = "visible";
+
+    let final = sc.verdict, note = "";
+    if (sc.verdict === "allow") {
+      now.innerHTML = `<b style="color:var(--allow)">ALLOW</b>: ${sc.reason}`;
+      await move("p-allow", 900, id);
+      hot("n-tool");
+    } else if (sc.verdict === "block") {
+      now.innerHTML = `<b style="color:var(--block)">BLOCK</b>: ${sc.reason}`;
+      await move("p-block", 900, id);
+      hot("n-blocked");
+    } else {
+      now.innerHTML = `<b style="color:var(--ask)">ASK</b>: ${sc.reason}. Waiting for a human...`;
+      await move("p-ask", 800, id);
+      hot("n-human");
+      await sleep(1300, id);
+      hot("n-human", false);
+      if (sc.human) {
+        final = "allow"; note = "approved by human";
+        now.innerHTML = `Human <b style="color:var(--allow)">approved</b>. The tool may run.`;
+        dot.setAttribute("fill", color.allow);
+        await move("p-approve", 700, id);
+        hot("n-tool");
+      } else {
+        final = "block"; note = "denied by human";
+        now.innerHTML = `Human <b style="color:var(--block)">denied</b>. The tool never runs.`;
+        dot.setAttribute("fill", color.block);
+        await move("p-deny", 700, id);
+        hot("n-blocked");
+      }
+    }
+    addLog(sc, final, note);
+    await sleep(800, id);
+
+    now.innerHTML = final === "allow"
+      ? "Result is returned to the agent as an observation"
+      : "Reasons are returned to the agent so it can re-plan";
+    await move(final === "allow" ? "p-result" : "p-refused", 1500, id);
+    hot("n-tool", false); hot("n-blocked", false); hot("n-audit", false);
+    hot("n-agent");
+    await sleep(900, id);
+  }
+
+  async function loop(start) {
+    const id = ++runId;
+    current = start;
+    try {
+      while (true) {
+        select(current);
+        await play(SCENARIOS[current], id);
+        current = (current + 1) % SCENARIOS.length;
+      }
+    } catch (e) { if (e !== "cancel") throw e; }
+  }
+
+  const controls = $("#controls");
+  SCENARIOS.forEach((sc, i) => {
+    const b = document.createElement("button");
+    b.textContent = sc.label;
+    b.onclick = () => { paused = false; playBtn.textContent = "Pause"; playBtn.classList.add("active"); loop(i); };
+    controls.insertBefore(b, playBtn);
+    buttons.push(b);
+  });
+  playBtn.onclick = () => {
+    paused = !paused;
+    playBtn.textContent = paused ? "Play" : "Pause";
+    playBtn.classList.toggle("active", !paused);
+  };
+
+  loop(0);
+})();
+</script>
+</body>
+</html>

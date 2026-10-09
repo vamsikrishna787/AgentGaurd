@@ -1,0 +1,63 @@
+# Agent Guard example policy
+version: 1
+name: example-agent-policy
+
+# Verdict when no list or rule matches: allow | block | ask
+default: block
+
+# Always allowed (unless a rule below blocks or asks). Globs are supported.
+allowlist:
+  - read_file
+  - search_*
+  - get_weather
+
+# Always blocked. Nothing can override the denylist.
+denylist:
+  - delete_*
+  - drop_database
+  - shell.exec
+
+rules:
+  - id: no-secret-files
+    tools: [read_file]
+    action: block
+    when:
+      - arg: path
+        op: matches
+        value: '(\.env|id_rsa|\.pem)$'
+    reason: Reading secret or credential files is not allowed
+
+  - id: large-payment-needs-approval
+    tools: [send_payment]
+    action: ask
+    when:
+      - arg: amount
+        op: gt
+        value: 100
+    reason: Payments over 100 require human approval
+
+  - id: small-payments-ok
+    tools: [send_payment]
+    action: allow
+    when:
+      - arg: amount
+        op: lte
+        value: 100
+    reason: Small payments are allowed
+
+  - id: external-email-needs-approval
+    tools: [send_email]
+    action: ask
+    when:
+      - arg: to
+        op: not_contains
+        value: "@mycompany.com"
+    reason: Emails to external recipients require human approval
+
+  - id: internal-email-ok
+    tools: [send_email]
+    action: allow
+    when:
+      - arg: to
+        op: endswith
+        value: "@mycompany.com"

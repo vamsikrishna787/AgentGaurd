@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "name": "json-example",
+  "default": "ask",
+  "allowlist": ["read_file", "list_dir"],
+  "denylist": ["rm_rf", "delete_*"],
+  "rules": [
+    {
+      "id": "write-only-in-workspace",
+      "tools": ["write_file"],
+      "action": "block",
+      "when": [{ "arg": "path", "op": "not_contains", "value": "/workspace/" }],
+      "reason": "Writes are only permitted inside /workspace/"
+    },
+    {
+      "id": "workspace-writes-ok",
+      "tools": ["write_file"],
+      "action": "allow",
+      "when": [{ "arg": "path", "op": "startswith", "value": "/workspace/" }]
+    }
+  ]
+}
